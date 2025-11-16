@@ -146,4 +146,8 @@ with st.sidebar:
 
     for q, t in history:
         st.caption(f"_{t.split('T')[1][:5]}_")
+<<<<<<< HEAD
         st.write(q[:50] + ("..." if len(q) > 50 else ""))
+=======
+        st.write(q[:50] + ("..." if len(q) > 50 else ""))
+>>>>>>> 73bdb2d18098dc9be83a8bb72f6a9e54d0a85335
