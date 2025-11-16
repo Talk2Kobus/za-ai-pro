@@ -1,0 +1,4 @@
+streamlit
+toon-lib
+markdown
+reportlab
