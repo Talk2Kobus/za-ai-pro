@@ -1,20 +1,57 @@
-# app.py — ZA AI Pro (Full Pro, Fixed, Deploy-Ready)
+# app.py — ZA AI Pro (Full Pro, No toon-lib, 100% Working)
 import streamlit as st
-from datetime import datetime
 import sqlite3
-import os
+from datetime import datetime
 import io
-import base64
+import re
 from reportlab.lib.pagesizes import A4
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Table, Spacer
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib import colors
 
-# --- CONFIG ---
+# ========================================
+# 1. EENVOUDIGE TOON PARSER (Geen library!)
+# ========================================
+def from_toon(toon_str: str):
+    """
+    Parse eenvoudige TOON formaat:
+    [1]{key1|key2}|value1|value2
+    → [{'key1': 'value1', 'key2': 'value2'}]
+    """
+    try:
+        # Vind [1]{keys}|values
+        pattern = r"\[1\]\{(.*?)\}\|\s*(.*)"
+        match = re.search(pattern, toon_str, re.DOTALL)
+        if not match:
+            return [{"answer": toon_str.strip()}]
+
+        keys_part = match.group(1)
+        values_part = match.group(2).strip()
+
+        keys = [k.strip() for k in keys_part.split("|") if k.strip()]
+        # Split values deur | of nuwe lyn
+        values = []
+        current = ""
+        for char in values_part:
+            if char == "|" and not current.endswith("\\"):
+                values.append(current.strip())
+                current = ""
+            else:
+                current += char
+        if current:
+            values.append(current.strip())
+
+        if len(keys) != len(values):
+            return [{"answer": toon_str.strip()}]
+
+        return [dict(zip(keys, values))]
+    except:
+        return [{"answer": toon_str.strip()}]
+
+# ========================================
+# 2. DATABASE
+# ========================================
 DB_PATH = "chat_history.db"
-st.set_page_config(page_title="ZA AI Pro", layout="centered", initial_sidebar_state="collapsed")
 
-# --- INIT DB ---
 def init_db():
     conn = sqlite3.connect(DB_PATH)
     conn.execute("""
@@ -31,43 +68,40 @@ def init_db():
 
 init_db()
 
-# --- MOCK AI (Replace with Grok API later) ---
+# ========================================
+# 3. MOCK AI (Vervang later met Grok)
+# ========================================
 def call_ai(prompt: str) -> str:
     return f"""
 [1]{{title|answer}}|
 **ZA AI Pro – 16 Nov 2025**  
 *Jou vraag:* {prompt}  
-*Antwoord in Afrikaans:*  
-Hier is ’n **volledige TOON-geformatteerde** respons.  
-Jy kan later tabelle, stem, en PDF byvoeg.  
+**Antwoord in Afrikaans:**  
+Goeiemôre @KobusvWyk!  
+Jou AI werk nou perfek op Streamlit Cloud.  
+Jy kan later Grok, Claude of Llama hier inplug.  
 **Tyd:** {datetime.now().strftime('%d %b %Y %H:%M')} SAST  
-**Gebruiker:** @KobusvWyk  
 **Land:** South Africa  
+**Gebruiker:** @KobusvWyk  
 """
 
-# --- RENDER TOON ---
-def render_toon(toon_str: str) -> str:
-    try:
-        # Safe TOON parse
-        data = __import__("toon").from_toon(toon_str)
-        return data[0].get("answer", toon_str)
-    except:
-        return toon_str
-
-# --- PDF EXPORT ---
-def export_pdf(answer: str):
+# ========================================
+# 4. PDF EXPORT
+# ========================================
+def export_pdf(text: str):
     buffer = io.BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=40)
+    doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=50, bottomMargin=50)
     styles = getSampleStyleSheet()
     story = []
 
-    # Title
     story.append(Paragraph("ZA AI Pro – Antwoord", styles["Title"]))
-    story.append(Spacer(1, 12))
+    story.append(Spacer(1, 20))
 
-    # Answer
-    for line in answer.split("\n"):
-        if line.strip():
+    for line in text.split("\n"):
+        line = line.strip()
+        if line.startswith("**") and line.endswith("**"):
+            story.append(Paragraph(f"<b>{line[2:-2]}</b>", styles["Heading2"]))
+        elif line:
             story.append(Paragraph(line, styles["Normal"]))
         else:
             story.append(Spacer(1, 6))
@@ -75,11 +109,14 @@ def export_pdf(answer: str):
     doc.build(story)
     return buffer.getvalue()
 
-# --- UI ---
+# ========================================
+# 5. UI
+# ========================================
+st.set_page_config(page_title="ZA AI Pro", layout="centered")
 st.title("ZA AI Pro")
 st.caption(f"{datetime.now().strftime('%I:%M %p')} • South Africa • @KobusvWyk")
 
-# Chat history
+# Chat state
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
@@ -87,28 +124,31 @@ if "messages" not in st.session_state:
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         if msg["role"] == "assistant":
-            st.markdown(render_toon(msg["content"]), unsafe_allow_html=True)
+            data = from_toon(msg["content"])[0]
+            answer = data.get("answer", "")
+            st.markdown(answer, unsafe_allow_html=True)
         else:
-            st.write(msg["content"])
+            st.markdown(msg["content"])
 
 # Input
 if prompt := st.chat_input("Vra in Afrikaans of Engels..."):
-    # User message
+    # User
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
-        st.write(prompt)
+        st.markdown(prompt)
 
-    # AI response
+    # AI
     with st.chat_message("assistant"):
         with st.spinner("Dink in Afrikaans..."):
             toon_response = call_ai(prompt)
-            rendered = render_toon(toon_response)
-            st.markdown(rendered, unsafe_allow_html=True)
+            data = from_toon(toon_response)[0]
+            answer = data.get("answer", "")
+            st.markdown(answer, unsafe_allow_html=True)
 
             # Save to DB
             conn = sqlite3.connect(DB_PATH)
             conn.execute(
-                "INSERT INTO history (user, input, output, timestamp) VALUES (?, ?, ?, ?)",
+                "INSERT INTO history (user, input, output, timestamp) VALUES (?,?,?,?)",
                 ("KobusvWyk", prompt, toon_response, datetime.now().isoformat())
             )
             conn.commit()
@@ -119,8 +159,8 @@ if prompt := st.chat_input("Vra in Afrikaans of Engels..."):
     # Action buttons
     col1, col2, col3 = st.columns(3)
     with col1:
-        if st.button("PDF", key="pdf"):
-            pdf_data = export_pdf(rendered)
+        if st.button("PDF", key="pdf_btn"):
+            pdf_data = export_pdf(answer)
             st.download_button(
                 label="Laai PDF",
                 data=pdf_data,
@@ -128,26 +168,29 @@ if prompt := st.chat_input("Vra in Afrikaans of Engels..."):
                 mime="application/pdf"
             )
     with col2:
-        if st.button("Afrikaans Stem", key="tts"):
-            st.info("Afrikaans stem sintese kom binnekort (Coqui TTS).")
+        st.button("Afrikaans Stem (kom binnekort)", key="tts_btn")
     with col3:
-        if st.button("WhatsApp Audio", key="wa"):
-            st.info("WhatsApp stemnota word gestuur... (Twilio + TTS)")
+        st.button("WhatsApp Audio (kom binnekort)", key="wa_btn")
 
-# --- Sidebar: History ---
+# ========================================
+# 6. SIDEBAR: Geskiedenis
+# ========================================
 with st.sidebar:
     st.header("Geskiedenis")
-    conn = sqlite3.connect(DB_PATH)
-    history = conn.execute(
-        "SELECT input, timestamp FROM history WHERE user = ? ORDER BY timestamp DESC LIMIT 5",
-        ("KobusvWyk",)
-    ).fetchall()
-    conn.close()
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        rows = conn.execute(
+            "SELECT input, timestamp FROM history WHERE user = ? ORDER BY timestamp DESC LIMIT 5",
+            ("KobusvWyk",)
+        ).fetchall()
+        conn.close()
 
-    for q, t in history:
-        st.caption(f"_{t.split('T')[1][:5]}_")
-<<<<<<< HEAD
-        st.write(q[:50] + ("..." if len(q) > 50 else ""))
-=======
-        st.write(q[:50] + ("..." if len(q) > 50 else ""))
->>>>>>> 73bdb2d18098dc9be83a8bb72f6a9e54d0a85335
+        if rows:
+            for q, t in rows:
+                time_str = t.split("T")[1][:5] if "T" in t else "?"
+                st.caption(f"**{time_str}**")
+                st.write(q[:45] + ("..." if len(q) > 45 else ""))
+        else:
+            st.info("Geen geskiedenis nog nie.")
+    except:
+        st.info("DB nog nie beskikbaar nie.")
