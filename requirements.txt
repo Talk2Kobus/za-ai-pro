@@ -1,1 +1,8 @@
 streamlit
+toon-lib
+markdown
+reportlab
+TTS
+soundfile
+twilio
+httpx
